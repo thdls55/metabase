@@ -19,23 +19,22 @@
              [field :refer [Field]]
              [humanization :as humanization]]
             [metabase.query-processor
-             [interface :as i]
+             [global :as global]
+             [mbql :as mbql]
              [sort :as sort]]
+            [puppetlabs.i18n.core :refer [tru]]
             [toucan.db :as db])
-  (:import [metabase.query_processor.interface Expression ExpressionRef]))
+  (:import [metabase.query_processor.mbql Expression ExpressionRef]))
 
 ;;; ## Field Resolution
 
 (defn- valid-collected-field? [keep-date-time-fields? f]
-  (or
-   ;; is `f` an instance of `Field`, `FieldLiteral`, or `ExpressionRef`?
-   (some (u/rpartial instance? f)
-         [metabase.query_processor.interface.Field
-          metabase.query_processor.interface.FieldLiteral
-          metabase.query_processor.interface.ExpressionRef])
-   ;; or if we're keeping DateTimeFields, is is an instance of `DateTimeField`?
-   (when keep-date-time-fields?
-     (instance? metabase.query_processor.interface.DateTimeField f))))
+  (and
+   ;; is `f` a Field-like object?
+   (satisfies? mbql/Field f)
+   ;; ...and, if we're not keeping datetime fields, is this a Field without a datetime unit?
+   (or keep-date-time-fields?
+       (not (mbql/has-datetime-unit? f)))))
 
 (defn collect-fields
   "Return a sequence of all the `Fields` inside THIS, recursing as needed for collections.
@@ -50,33 +49,33 @@
   (condp instance? this
     ;; For a DateTimeField we'll flatten it back into regular Field but include the :unit info for the frontend.
     ;; Recurse so it is otherwise handled normally
-    metabase.query_processor.interface.DateTimeField
-    (let [{:keys [field unit]} this
+    #_metabase.query_processor.mbql.DateTimeField
+    #_(let [{:keys [field unit]} this
           fields               (collect-fields (assoc field :unit unit) keep-date-time-fields?)]
       (if keep-date-time-fields?
         (for [field fields]
           (i/map->DateTimeField {:field field, :unit unit}))
         fields))
 
-    metabase.query_processor.interface.BinnedField
-    (let [{:keys [strategy min-value max-value], nested-field :field} this]
+    #_metabase.query_processor.mbql.BinnedField
+    #_(let [{:keys [strategy min-value max-value], nested-field :field} this]
       [(assoc nested-field :binning_info {:binning_strategy strategy
                                           :bin_width (:bin-width this)
                                           :num_bins (:num-bins this)
                                           :min_value min-value
                                           :max_value max-value})])
 
-    metabase.query_processor.interface.Field
+    metabase.query_processor.mbql.Field
     (if-let [parent (:parent this)]
       [this parent]
       [this])
 
-    metabase.query_processor.interface.FieldLiteral
+    metabase.query_processor.mbql.FieldLiteral
     [(assoc this
        :field-id           [:field-literal (:field-name this) (:base-type this)]
        :field-display-name (humanization/name->human-readable-name (:field-name this)))]
 
-    metabase.query_processor.interface.ExpressionRef
+    metabase.query_processor.mbql.ExpressionRef
     [(assoc this
        :field-display-name (:expression-name this)
        :base-type          :type/Float
@@ -116,7 +115,7 @@
 
     nil))
 
-(defn- qualify-field-name
+#_(defn- qualify-field-name
   "Update the `field-name` to reflect the name we expect to see coming back from the query.
    (This is for handling Mongo nested Fields, I think (?))"
   [field]
@@ -126,11 +125,11 @@
 (defn aggregation-name
   "Return an appropriate field *and* display name for an `:aggregation` subclause (an aggregation or expression)."
   ^String [{custom-name :custom-name, aggregation-type :aggregation-type, :as ag}]
-  (when-not i/*driver*
-    (throw (Exception. "metabase.query-processor.interface/*driver* is unbound.")))
+  (when-not global/*driver*
+    (throw (Exception. (str (tru "metabase.query-processor.global/*driver* is unbound.")))))
   (cond
     ;; if a custom name was provided use it
-    custom-name               (driver/format-custom-field-name i/*driver* custom-name)
+    custom-name               (driver/format-custom-field-name global/*driver* custom-name)
     ;; for unnamed expressions, just compute a name like "sum + count"
     (instance? Expression ag) (let [{:keys [operator args]} ag]
                                 (str/join (str " " (name operator) " ")
@@ -345,7 +344,7 @@
       (->> (dissoc query-with-renamed-columns :expressions)
            collect-fields
            ;; qualify the field name to make sure it matches what will come back. (For Mongo nested queries only)
-           (map qualify-field-name)
+           #_(map qualify-field-name)
            ;; add entries for aggregate fields
            (add-aggregate-fields-if-needed inner-query)
            ;; make field-name a keyword

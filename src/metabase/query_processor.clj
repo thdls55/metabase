@@ -21,7 +21,6 @@
              [cumulative-aggregations :as cumulative-ags]
              [dev :as dev]
              [driver-specific :as driver-specific]
-             [expand :as expand]
              [expand-macros :as expand-macros]
              [fetch-source-query :as fetch-source-query]
              [format-rows :as format-rows]
@@ -30,15 +29,17 @@
              [mbql-to-native :as mbql-to-native]
              [parameters :as parameters]
              [permissions :as perms]
-             [resolve :as resolve]
              [resolve-driver :as resolve-driver]
              [results-metadata :as results-metadata]
              [source-table :as source-table]]
+            [metabase.query-processor.mbql :as mbql]
             [metabase.query-processor.util :as qputil]
+            [metabase.query-processor.global :as global]
             [metabase.util
              [date :as du]
              [schema :as su]]
             [schema.core :as s]
+            [medley.core :as m]
             [toucan.db :as db]))
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
@@ -98,11 +99,9 @@
       results-metadata/record-and-return-metadata!
       format-rows/format-rows
       binning/update-binning-strategy
-      resolve/resolve-middleware
       add-dim/add-remapping
       implicit-clauses/add-implicit-clauses
       source-table/resolve-source-table-middleware
-      expand/expand-middleware                         ; ▲▲▲ QUERY EXPANSION POINT  ▲▲▲ All functions *above* will see EXPANDED query during PRE-PROCESSING
       row-count-and-status/add-row-count-and-status    ; ▼▼▼ RESULTS WRAPPING POINT ▼▼▼ All functions *below* will see results WRAPPED in `:data` during POST-PROCESSING
       parameters/substitute-parameters
       expand-macros/expand-macros
@@ -128,11 +127,20 @@
         (throw (ex-info "No native form returned."
                  results)))))
 
+(defn parse-query [query]
+  (let [query (-> (m/map-keys mbql/normalize-token query)
+                  (update :type mbql/normalize-token))]
+    (if (= (:type query) :query)
+      (mbql/parse-query query)
+      query)))
+
+(def ^:dynamic global/*query* nil)
+
 (defn process-query
   "A pipeline of various QP functions (including middleware) that are used to process MB queries."
   {:style/indent 0}
   [query]
-  ((qp-pipeline execute-query) query))
+  ((qp-pipeline execute-query) (parse-query query)))
 
 (def ^{:arglists '([query])} expand
   "Expand a QUERY the same way it would normally be done as part of query processing.

@@ -2,7 +2,7 @@
   "Code for determining the order columns should be returned in from query results."
   ;; TODO - This namespace should be called something like `metabase.query-processor.middleware.sort`
   (:require [clojure.tools.logging :as log]
-            [metabase.query-processor.interface :as i]
+            [metabase.query-processor.global :as global]
             [metabase.util :as u]))
 
 ;; Fields should be returned in the following order:
@@ -81,6 +81,6 @@
   (if-not (should-sort? inner-query)
     fields
     (let [field-importance (field-importance-fn inner-query)]
-      (when-not i/*disable-qp-logging*
+      (when-not global/*disable-qp-logging*
         (log/debug (u/format-color 'yellow "Sorted fields:\n%s" (u/pprint-to-str (sort (map field-importance fields))))))
       (sort-by field-importance fields))))
