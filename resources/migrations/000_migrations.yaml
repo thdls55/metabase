@@ -4988,3 +4988,52 @@ databaseChangeLog:
         - dropColumn:
             tableName: metabase_field
             columnName: raw_column_id
+
+  - changeSet:
+      id: 94
+      author: senior
+      comment: 'Added 0.31.0'
+      changes:
+        - createTable:
+            tableName: TASK_HISTORY
+            remarks: 'Timing and metadata info about background processes'
+            columns:
+              - column:
+                  name: id
+                  type: int
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: task
+                  type: VARCHAR(254)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: db_id
+                  type: integer
+              - column:
+                  name: started_at
+                  type: datetime
+                  constraints:
+                    nullable: false
+              - column:
+                  name: ended_at
+                  type: datetime
+                  constraints:
+                    nullable: false
+              - column:
+                  name: duration
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: task_details
+                  type: text
+        - createIndex:
+            indexName: idx_task_history_end_time
+            tableName: TASK_HISTORY
+            columns:
+              - column:
+                  name: ended_at
