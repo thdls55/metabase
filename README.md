@@ -35,6 +35,7 @@ For more information check out [metabase.com](http://www.metabase.com)
 - Oracle
 - Vertica
 - Presto
+- Dremio _(Experimental)_
 
 Don't see your favorite database? File an issue to let us know.
 
